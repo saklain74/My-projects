@@ -1,0 +1,230 @@
+<?php
+// views/admin/category_create.php
+
+if(session_status() == PHP_SESSION_NONE) {
+    session_start();
+}
+
+if(!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin'){
+    header("Location: ../auth/login.php");
+    exit();
+}
+
+require_once __DIR__ . '/../../config/db.php';
+
+$database = new Database();
+$connection = $database->openConnection();
+
+// Fetch parent categories for dropdown
+$parentCategories = [];
+$sql = "SELECT id, name FROM categories WHERE parent_id IS NULL ORDER BY name";
+$result = $connection->query($sql);
+if($result){
+    while($row = $result->fetch_assoc()){
+        $parentCategories[] = $row;
+    }
+}
+
+$error = '';
+$success = '';
+
+if($_SERVER['REQUEST_METHOD'] === 'POST'){
+    $name = trim($_POST['name'] ?? '');
+    $parent_id = !empty($_POST['parent_id']) ? intval($_POST['parent_id']) : null;
+    
+    if(empty($name)){
+        $error = "Category name is required";
+    } else {
+        $checkSql = "SELECT id FROM categories WHERE name = ?";
+        $checkStmt = $connection->prepare($checkSql);
+        $checkStmt->bind_param("s", $name);
+        $checkStmt->execute();
+        $checkResult = $checkStmt->get_result();
+        
+        if($checkResult->num_rows > 0){
+            $error = "Category with this name already exists";
+        } else {
+            if($parent_id){
+                $insertSql = "INSERT INTO categories (name, parent_id) VALUES (?, ?)";
+                $insertStmt = $connection->prepare($insertSql);
+                $insertStmt->bind_param("si", $name, $parent_id);
+            } else {
+                $insertSql = "INSERT INTO categories (name) VALUES (?)";
+                $insertStmt = $connection->prepare($insertSql);
+                $insertStmt->bind_param("s", $name);
+            }
+            
+            if($insertStmt->execute()){
+                $success = "Category created successfully!";
+                $_POST = [];
+            } else {
+                $error = "Failed to create category: " . $connection->error;
+            }
+        }
+    }
+}
+
+$database->closeConnection($connection);
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Create Category</title>
+    <style>
+        /* Beginner CSS - Simple and Clean */
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: white;
+            border: 1px solid #ddd;
+            padding: 20px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+        
+        /* Navigation Links */
+        .nav {
+            background-color: #333;
+            padding: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .nav a {
+            color: white;
+            text-decoration: none;
+            margin-right: 15px;
+            padding: 5px 10px;
+        }
+        
+        .nav a:hover {
+            background-color: #555;
+        }
+        
+        /* Form Groups */
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        input[type="text"], select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        
+        /* Buttons */
+        .btn-submit {
+            background-color: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .btn-submit:hover {
+            background-color: #218838;
+        }
+        
+        .btn-cancel {
+            background-color: #6c757d;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 4px;
+            display: inline-block;
+            margin-left: 10px;
+        }
+        
+        .btn-cancel:hover {
+            background-color: #5a6268;
+        }
+        
+        /* Messages */
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            border: 1px solid #c3e6cb;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Create Category</h1>
+    
+    <div class="nav">
+        <a href="dashboard.php">Dashboard</a>
+        <a href="categories.php">Categories</a>
+        <a href="products.php">Products</a>
+        <a href="orders.php">Orders</a>
+        <a href="../../controllers/AuthController.php?action=logout">Logout</a>
+    </div>
+    
+    <?php if($error): ?>
+        <div class="error"><?php echo $error; ?></div>
+    <?php endif; ?>
+    
+    <?php if($success): ?>
+        <div class="success"><?php echo $success; ?></div>
+    <?php endif; ?>
+    
+    <form method="POST">
+        <div class="form-group">
+            <label>Category Name *</label>
+            <input type="text" name="name" value="<?php echo htmlspecialchars($_POST['name'] ?? ''); ?>" required>
+        </div>
+        
+        <div class="form-group">
+            <label>Parent Category (Optional)</label>
+            <select name="parent_id">
+                <option value="">-- None (Top Level) --</option>
+                <?php foreach($parentCategories as $cat): ?>
+                    <option value="<?php echo $cat['id']; ?>" <?php echo (isset($_POST['parent_id']) && $_POST['parent_id'] == $cat['id']) ? 'selected' : ''; ?>>
+                        <?php echo htmlspecialchars($cat['name']); ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        
+        <div>
+            <button type="submit" class="btn-submit">Create Category</button>
+            <a href="categories.php" class="btn-cancel">Cancel</a>
+        </div>
+    </form>
+</div>
+
+</body>
+</html>
